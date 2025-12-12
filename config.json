@@ -1,0 +1,7 @@
+{
+    "device_index": 0,
+    "energy_threshold": 5,
+    "pause_threshold": 1.0,
+    "phrase_time_limit": 20,
+    "timeout": 2
+}
