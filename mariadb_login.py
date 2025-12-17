@@ -10,7 +10,8 @@ class MariaDBLogin:
     """Unified MariaDB login UI that can be used either as a standalone
     Tk window (no parent) or as a modal Toplevel (parent supplied).
     """
-    version = "0.0.1"
+    version = "0.0.2"
+    # - Version 0.0.2: Added cancel button
 
     def __init__(self, parent: tk.Misc | None = None, initial_values: dict | None = None):
         # Create window either as Toplevel (if parent given) or Tk
@@ -72,6 +73,7 @@ class MariaDBLogin:
         btn_frame = ttk.Frame(frm)
         btn_frame.grid(row=4, column=0, columnspan=4, pady=(15, 0))
         ttk.Button(btn_frame, text="Connect", command=self.on_connect).grid(row=0, column=0, padx=6)
+        ttk.Button(btn_frame, text="Cancel", command=self.on_cancel).grid(row=0, column=1, padx=6)
 
         frm.columnconfigure(1, weight=1)
 
@@ -93,7 +95,6 @@ class MariaDBLogin:
                 raise RuntimeError("Failed to connect to MariaDB.")
             self.connection = conn
             self._result = conn
-            messagebox.showinfo("Success", "Connected to MariaDB successfully!")
             # close window
             try:
                 self.win.destroy()
@@ -126,9 +127,5 @@ class MariaDBLogin:
             self.win.transient(self.win.master)
             self.win.grab_set()
             self.win.wait_window()
-        return self._result
-
-
-# We use a single class `MariaDBLogin` for both modal and standalone use
-    
+        return self._result    
     

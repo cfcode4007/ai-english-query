@@ -7,6 +7,7 @@ from tkinter import ttk
 from mariadb_login import MariaDBLogin
 from stt_listener import STTListener
 from ailib import Payload
+from threading import Thread
 import os
 import tkinter.font as tkfont
 import re
@@ -17,7 +18,8 @@ class aiEnglishQuery(tk.Frame):
 	"""
     Interface for submitting plain English queries to an AI agent who generates SQL, which is executed by itself.
     """
-	version = "0.0.3"
+	version = "0.0.4"
+	# - Version 0.0.4: Corrected Start Speech/Listen button placement, added connection label, made status label live
 	# - Version 0.0.3: Modified STTListener to explicitly stop listening after a 'phrase' (speech within time limit or silence timeout)
 	# - Version 0.0.2: Implemented STTListener integration for dynamic speech to text input, push to talk but recognizes pauses
 
@@ -125,12 +127,12 @@ class aiEnglishQuery(tk.Frame):
 
 	def create_widgets(self):
 		# Label for the text box
-		lbl = tk.Label(self, text="Plain English Query:")
+		lbl = tk.Label(self, text="Please enter/say your query in plain English:")
 		lbl.grid(row=1, column=0, sticky="w", padx=6, pady=(6, 0))
 
 		# Text widget with a vertical scrollbar
 		self.text_frame = tk.Frame(self)
-		self.text_frame.grid(row=2, column=0, columnspan=2, sticky="nsew", padx=6)
+		self.text_frame.grid(row=2, column=0, columnspan=3, sticky="nsew", padx=6)
 
 		self.text = tk.Text(self.text_frame, wrap="word", width=60, height=12)
 		self.text.grid(row=0, column=0, sticky="nsew")
@@ -139,24 +141,40 @@ class aiEnglishQuery(tk.Frame):
 		self.scrollbar.grid(row=0, column=1, sticky="ns")
 		self.text.configure(yscrollcommand=self.scrollbar.set)
 
-		# Buttons
-		self.submit_btn = tk.Button(self, text="Submit", command=self.on_submit)
-		self.submit_btn.grid(row=3, column=0, sticky="w", padx=6, pady=6)
+		# Buttons: place them inside a fixed frame so their spacing remains
+		# consistent regardless of changes to other widgets (e.g., status text).
+		self.button_frame = tk.Frame(self)
+		self.button_frame.grid(row=3, column=0, columnspan=3, sticky="we", padx=6, pady=6)
+		self.submit_btn = tk.Button(self.button_frame, text="Submit", command=self.on_submit)
+		self.submit_btn.pack(side='left')
 
-		self.clear_btn = tk.Button(self, text="Clear", command=self.on_clear)
-		self.clear_btn.grid(row=3, column=1, sticky="e", padx=6, pady=6)
+		self.clear_btn = tk.Button(self.button_frame, text="Clear", command=self.on_clear)
+		self.clear_btn.pack(side='left', padx=8)
 
 		# Speech toggle button, will be disabled if STTListener not available
-		self.speech_toggle_btn = tk.Button(self, text="Start Speech", command=self._toggle_speech)
-		self.speech_toggle_btn.grid(row=3, column=2, sticky="e", padx=6, pady=6)
+		self.speech_toggle_btn = tk.Button(self.button_frame, text="Listen", command=self._toggle_speech)
+		self.speech_toggle_btn.pack(side='left')
 		if not hasattr(self, 'stt_listener') or self.stt_listener is None:
 			self.speech_toggle_btn.config(state='disabled')
 
-		# Status label
+		# Static connection label
+		self.connection_lbl = tk.Label(
+			self,
+			text=(
+				f"Connected to "
+				f"{self.db.user}@{self.db.host}/{self.db.database}"
+				if self.db else "Connected to N/A"
+			),
+			anchor="w"
+		)
+		self.connection_lbl.grid(row=4, column=0, sticky="w", padx=6, pady=(0, 6))
+
+		# Status label spans the remaining two columns so its changing text
+		# does not affect the relative positions of the buttons above.
 		self.status_var = tk.StringVar(value="Ready")
 		self.status_lbl = tk.Label(self, textvariable=self.status_var, anchor="w")
-		self.status_lbl.grid(row=4, column=0, columnspan=2, sticky="we", padx=6, pady=(0, 6))
-
+		self.status_lbl.grid(row=4, column=1, columnspan=2, sticky="we", padx=6, pady=(0, 6))
+		
 		# Make grid expandable
 		# Make the result grid row expand by default (row 0)
 		self.grid_rowconfigure(0, weight=1)
@@ -181,13 +199,13 @@ class aiEnglishQuery(tk.Frame):
 		self.result_tree.configure(yscrollcommand=self.result_scroll.set)
 		# Add a horizontal scrollbar for wide tables
 		self.result_hscroll = tk.Scrollbar(self.result_frame, orient="horizontal", command=self.result_tree.xview)
-		self.result_hscroll.grid(row=1, column=0, columnspan=2, sticky="ew")
+		self.result_hscroll.grid(row=1, column=0, columnspan=3, sticky="ew")
 		self.result_tree.configure(xscrollcommand=self.result_hscroll.set)
 
 		self.result_frame.grid_rowconfigure(0, weight=1)
 		self.result_frame.grid_columnconfigure(0, weight=1)
 		# Place the result grid above the input area, hide until populated
-		self.result_frame.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=6, pady=(0, 6))
+		self.result_frame.grid(row=0, column=0, columnspan=3, sticky="nsew", padx=6, pady=(0, 6))
 		self.grid_rowconfigure(0, weight=1)
 		self.result_frame.grid_remove()
 
@@ -278,22 +296,78 @@ class aiEnglishQuery(tk.Frame):
 		self._on_root_resize(None)
 
 	def on_submit(self):
+		# Prepare and run submission in a background thread so the UI can remain
+		# responsive and status/button updates are visible while we wait.
 		# Toggle off speech if active
-		if self.stt_listener.is_listening:
+		if getattr(self, 'stt_listener', None) and self.stt_listener.is_listening:
 			self._toggle_speech()
+		# Disable interactive buttons so the user cannot re-submit while work is running
+		self.submit_btn.config(state='disabled')
+		self.clear_btn.config(state='disabled')
+		if hasattr(self, 'speech_toggle_btn'):
+			self.speech_toggle_btn.config(state='disabled')
 		content = self.text.get("1.0", "end-1c")  # 'end-1c' removes final newline
+		# Empty input text box
 		if not content.strip():
 			messagebox.showwarning("Empty", "Please enter some text before submitting.")
 			self.status_var.set("Nothing to submit")
-			return				
-		self.status_var.set(f"Submitted ({len(content)} chars)")	
-		# Come up with an SQL command based on the plain text entry and given schema
-		sql = self.generate_sql(content)
-		# Get results of SQL command from given live database
-		results = self.execute_sql(sql)
-		# Populate and show results grid		
-		self.load_to_tkinter_grid(results)
-		self.result_frame.grid()
+			# Re-enable buttons
+			self.submit_btn.config(state='normal')
+			self.clear_btn.config(state='normal')
+			if hasattr(self, 'speech_toggle_btn'):
+				self.speech_toggle_btn.config(state='normal')
+			return
+		# Non-empty input text box
+		self.status_var.set('Submitting...')
+		# Start background worker
+		thread = Thread(target=self._submit_worker, args=(content,), daemon=True)
+		thread.start()
+
+	def _submit_worker(self, content: str):
+		"""Background worker that generates SQL, executes it and schedules UI updates."""
+		try:
+			# Generate SQL (may be network-bound / slow)
+			sql = self.generate_sql(content)
+			# Execute SQL against database
+			results = self.execute_sql(sql)
+			error = None
+		except Exception as e:
+			results = None
+			error = e
+		# Schedule completion handler on the main thread
+		if self.master:
+			self.master.after(0, lambda: self._submit_complete(results, error, content))
+		else:
+			# Fallback if no master available
+			self._submit_complete(results, error, content)
+
+	def _submit_complete(self, results, error, content: str):
+		"""Run on the main thread to update UI after background submit finishes."""
+		# Re-enable buttons
+		try:
+			self.submit_btn.config(state='normal')
+			self.clear_btn.config(state='normal')
+		except Exception:
+			pass
+		if hasattr(self, 'speech_toggle_btn'):
+			try:
+				self.speech_toggle_btn.config(state='normal')
+			except Exception:
+				pass
+		if error:
+			logging.exception('Error during submission')
+			messagebox.showerror("Error", f"An error occurred: {error}")
+			self.status_var.set('Error')
+			return
+		# Populate and show results grid
+		try:
+			self.load_to_tkinter_grid(results)
+			self.result_frame.grid()
+			self.status_var.set(f"Submitted successfully, returned {len(results)} row(s)")
+		except Exception:
+			logging.exception('Error updating results grid')
+			messagebox.showerror("Error", "Failed to update results grid")
+			self.status_var.set('Error')
 
 	def on_clear(self):
 		self.text.delete("1.0", "end")
@@ -334,10 +408,12 @@ class aiEnglishQuery(tk.Frame):
 		"""
 		try:
 			if self.master:
-				self.master.after(0, lambda: (self.speech_toggle_btn.config(text='Start Speech'), self.status_var.set('Ready')))
+				self.master.after(0, lambda: (self.speech_toggle_btn.config(text='Listen'), self.status_var.set('Ready')))
 			else:
-				self.speech_toggle_btn.config(text='Start Speech')
+				self.speech_toggle_btn.config(text='Listen')
 				self.status_var.set('Ready')
+				self.submit_btn.config(state='normal')
+				self.clear_btn.config(state='normal')
 		except Exception:
 			logging.exception('Error in _on_stt_stop')
 
@@ -347,31 +423,27 @@ class aiEnglishQuery(tk.Frame):
 			return
 		if not self.stt_listener.is_listening:
 			self.stt_listener.start_speech()
-			self.speech_toggle_btn.config(text='Stop Speech')
-			self.status_var.set('Listening')
+			self.speech_toggle_btn.config(text='Stop Listening')
+			self.status_var.set('Listening...')
+			self.submit_btn.config(state='disabled')
+			self.clear_btn.config(state='disabled')
 		else:
 			self.stt_listener.stop_speech()
-			self.speech_toggle_btn.config(text='Start Speech')
+			self.speech_toggle_btn.config(text='Listen')
 			self.status_var.set('Ready')
+			self.submit_btn.config(state='normal')
+			self.clear_btn.config(state='normal')
 
 def main():
 	logging.info("💡")
 	# Show the login window first and only create the main root on success
 	login = MariaDBLogin()
-	# Optionally pre-fill default values as desired
-	try:
-		login.host_var.set("192.168.123.244")
-		login.database_var.set("ai_db")
-		login.username_var.set("ai")
-		login.password_var.set("ai")
-	except Exception:
-		pass
+	# Optionally pre-fill default values as desired	
+	login.host_var.set("192.168.123.244")
+	login.database_var.set("ai_db")
+	login.username_var.set("ai")
+	login.password_var.set("ai")	
 	conn = login.run()
-	# Ensure login window is properly closed
-	try:
-		login.destroy()
-	except Exception:
-		pass
 	if conn is None:
 		# User cancelled login; exit application
 		logging.info("MariaDB login cancelled by user; exiting application.")
@@ -381,8 +453,8 @@ def main():
 	root = tk.Tk()
 	# Set a sensible default window size
 	root.title("AI English Query")
-	root.geometry("640x420")
-	root.minsize(640, 420)
+	root.geometry("1280x720")
+	root.minsize(1280, 720)
 	app = aiEnglishQuery("prompts.json", "chat_history.json", master=root, db=conn)
 	root.mainloop()
 

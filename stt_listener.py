@@ -53,7 +53,6 @@ class STTListener:
     def init_microphone(self):
         try:
             mic_list = sr.Microphone.list_microphone_names()
-            self._log(f"Available microphones: {mic_list}")
             logging.debug(f"Available microphones: {mic_list}")
             self.microphone = sr.Microphone(device_index=self.config["device_index"])
             with self.microphone as source:
@@ -61,12 +60,9 @@ class STTListener:
                 self.recognizer.dynamic_energy_threshold = True
                 self.recognizer.energy_threshold = self.config["energy_threshold"]
                 self.recognizer.pause_threshold = self.config["pause_threshold"]
-                self._log(f"Ambient noise level: {self.recognizer.energy_threshold}")
                 logging.debug(f"Ambient noise level: {self.recognizer.energy_threshold}")
-            self._log("Microphone initialized successfully.")
             logging.debug("Microphone initialized successfully.")
         except Exception as e:
-            self._log(f"Microphone Error: {str(e)}")
             logging.error(f"Microphone Error: {str(e)}")
 
     def list_microphones(self):

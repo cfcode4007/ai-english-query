@@ -16,7 +16,8 @@ class MariaDBConnection:
     MariaDB connection class using mysql-connector-python
     Designed to accept raw SQL strings directly
     """
-    version = "0.0.1"
+    version = "0.0.2"
+    # - Version 0.0.2: Added properties to expose configured host, user and database, as well as stopped automatic reconnection attempts
 
     def __init__(
         self,
@@ -49,30 +50,47 @@ class MariaDBConnection:
         self.cursor = None
 
     def _connect(self) -> bool:
-        """Internal method to establish connection with retry logic"""
-        import time
-        
-        for attempt in range(self.reconnect_attempts + 1):
-            try:
-                if self.connection and self.connection.is_connected():
-                    return True
-                    
-                if self.connection:
-                    self.connection.close()
-                    
-                self.connection = mysql.connector.connect(**self.config)
-                self.cursor = self.connection.cursor()
-                logger.info(f"Connected to MariaDB at {self.config['host']}:{self.config['port']}")
+        """Internal method to establish connection with retry logic"""        
+        try:
+            if self.connection and self.connection.is_connected():
                 return True
                 
-            except Error as err:
-                logger.error(f"Connection attempt {attempt + 1} failed: {err}")
-                if attempt < self.reconnect_attempts:
-                    time.sleep(self.reconnect_delay)
-                else:
-                    logger.critical("All connection attempts failed.")
-                    return False
-        return False
+            if self.connection:
+                self.connection.close()
+                
+            self.connection = mysql.connector.connect(**self.config)
+            self.cursor = self.connection.cursor()
+            logger.info(f"Connected to MariaDB at {self.config['host']}:{self.config['port']}")
+            return True
+            
+        except Error as err:
+            logger.error(f"Connection failed: {err}")
+            return False
+        
+        # import time
+        
+        # for attempt in range(self.reconnect_attempts + 1):
+        #     try:
+        #         if self.connection and self.connection.is_connected():
+        #             return True
+                    
+        #         if self.connection:
+        #             self.connection.close()
+                    
+        #         self.connection = mysql.connector.connect(**self.config)
+        #         self.cursor = self.connection.cursor()
+        #         logger.info(f"Connected to MariaDB at {self.config['host']}:{self.config['port']}")
+        #         return True
+                
+        #     except Error as err:
+        #         logger.error(f"Connection attempt {attempt + 1} failed: {err}")
+        #         if attempt < self.reconnect_attempts:
+        #             time.sleep(self.reconnect_delay)
+        #         else:
+        #             logger.critical("All connection attempts failed.")
+        #             return False
+        # return False
+            
 
     @contextmanager
     def get_cursor(self):
@@ -153,3 +171,68 @@ class MariaDBConnection:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
+
+    # 0.0.2
+    @property
+    def user(self) -> Optional[str]:
+        """Return the name of the database this connection is configured to use.
+
+        This first prefers the configured value passed to the constructor
+        (self.config['database']). If the underlying connection is already
+        established and exposes a `database` attribute, that value is used as
+        a fallback.
+        """
+        user = self.config.get('user')
+        if user:
+            return user
+        if self.connection and hasattr(self.connection, 'user'):
+            try:
+                return getattr(self.connection, 'user')
+            except Exception:
+                # Be conservative in what we return; if introspection fails,
+                # return None rather than raising.
+                return None
+        return None
+    
+    @property
+    def host(self) -> Optional[str]:
+        """Return the name of the database this connection is configured to use.
+
+        This first prefers the configured value passed to the constructor
+        (self.config['database']). If the underlying connection is already
+        established and exposes a `database` attribute, that value is used as
+        a fallback.
+        """
+        host = self.config.get('host')
+        if host:
+            return host
+        if self.connection and hasattr(self.connection, 'host'):
+            try:
+                return getattr(self.connection, 'host')
+            except Exception:
+                # Be conservative in what we return; if introspection fails,
+                # return None rather than raising.
+                return None
+        return None
+
+    @property
+    def database(self) -> Optional[str]:
+        """Return the name of the database this connection is configured to use.
+
+        This first prefers the configured value passed to the constructor
+        (self.config['database']). If the underlying connection is already
+        established and exposes a `database` attribute, that value is used as
+        a fallback.
+        """
+        db = self.config.get('database')
+        if db:
+            return db
+        if self.connection and hasattr(self.connection, 'database'):
+            try:
+                return getattr(self.connection, 'database')
+            except Exception:
+                # Be conservative in what we return; if introspection fails,
+                # return None rather than raising.
+                return None
+        return None
+    
