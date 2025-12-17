@@ -16,7 +16,8 @@ class MariaDBConnection:
     MariaDB connection class using mysql-connector-python
     Designed to accept raw SQL strings directly
     """
-    version = "0.0.2"
+    version = "0.0.3"
+    # - Version 0.0.3: Added method to retrieve schema information
     # - Version 0.0.2: Added properties to expose configured host, user and database, as well as stopped automatic reconnection attempts
 
     def __init__(
@@ -111,6 +112,35 @@ class MariaDBConnection:
         finally:
             # Cursor is managed by connection, no need to close explicitly
             pass
+
+    def get_schema(self) -> str:
+        """
+        Perform a specific query to retrieve schema information for the connected database.
+        """
+        # Build a clear, single-string SQL query to retrieve the schema rows
+        # for the configured database. Using a triple-quoted f-string avoids
+        # accidental tuple construction when SQL is split across multiple
+        # lines or when commas are used for readability.
+        dbname = self.database
+        schema_qry = f"""
+        SELECT
+            IFNULL(C.TABLE_SCHEMA,'') AS database,
+            IFNULL(C.TABLE_NAME,'') AS table_name,
+            IFNULL(T.TABLE_TYPE,'') AS object_type,
+            IFNULL(C.COLUMN_NAME,'') AS column_name,
+            IFNULL(C.COLUMN_TYPE,'') AS column_type,
+            IFNULL(C.IS_NULLABLE,'') AS is_nullable,
+            IFNULL(C.COLUMN_DEFAULT,'') AS column_default,
+            IFNULL(C.EXTRA,'') AS extra
+        FROM INFORMATION_SCHEMA.COLUMNS C
+        LEFT JOIN INFORMATION_SCHEMA.TABLES T
+            ON C.TABLE_SCHEMA = T.TABLE_SCHEMA AND C.TABLE_NAME = T.TABLE_NAME
+        WHERE C.TABLE_SCHEMA = '{dbname}'
+        ORDER BY C.TABLE_SCHEMA, C.TABLE_NAME, C.ORDINAL_POSITION;
+        """
+        schema = self.execute(schema_qry)
+        schema_str = str(schema)
+        return schema_str
 
     def execute(self, sql: str) -> List[Dict[str, Any]]:
         """

@@ -18,13 +18,16 @@ class aiEnglishQuery(tk.Frame):
 	"""
     Interface for submitting plain English queries to an AI agent who generates SQL, which is executed by itself.
     """
-	version = "0.0.4"
+	version = "0.0.5"
+	# - Version 0.0.5: Added the ability to query any given database rather than only a sample one
 	# - Version 0.0.4: Corrected Start Speech/Listen button placement, added connection label, made status label live
 	# - Version 0.0.3: Modified STTListener to explicitly stop listening after a 'phrase' (speech within time limit or silence timeout)
 	# - Version 0.0.2: Implemented STTListener integration for dynamic speech to text input, push to talk but recognizes pauses
 
 	# Provide a default placeholder for the connection object (None until 'initialize_connection' runs)
 	db = None
+	# Provide a default placeholder for the schema of the database
+	schema = None
 	# Provide a default placeholder for results to avoid later NameError when the UI populates the grid
 	results = []
 
@@ -39,13 +42,16 @@ class aiEnglishQuery(tk.Frame):
 		self.master = master
 		# If a database connection was provided, use it; otherwise expect
 		# the caller to set it before calling db-related methods
-		self.db = db
+		self.db = db		
+		self.schema = self.db.get_schema() if self.db else None
+		print(f"Database Schema: {self.schema}")
 		# Initialize Open AI Key, Payload, and an AI agent with desired parameters for every analysis in the session
 		api_key = self.load_openai_key()
 		self.payload = Payload(prompt_file, history_file, api_key)
 		logging.info(f"AIEnglishQuery v{self.version} class currently using ModelConnection v{self.payload.connection.version}, PromptBuilder v{self.payload.prompts.version}, ChatHistoryManager v{self.payload.history.version}, Payload v{self.payload.version}, MariaDBLogin v{MariaDBLogin.version}, MariaDBConnector v{self.db.version if self.db else 'N/A'}, STTListener v{STTListener.version}")
 		# Configure AI for session
-		self.initialize_ai("gpt-5-nano", "low", "aiEnglishQuery_AIDB", "aiEnglishQuery", True)
+		# self.initialize_ai("gpt-5-nano", "low", "aiEnglishQuery_AIDB", "aiEnglishQuery", True)
+		self.initialize_ai("gpt-5-nano", "low", "aiEnglishQuery", "aiEnglishQuery", True)
 		# Initialize STT listener and callback to write to text input
 		try:
 			# Provide a stop callback so UI can update the Start/Stop button when
@@ -68,13 +74,13 @@ class aiEnglishQuery(tk.Frame):
 		"""TRUE for DEBUG mode, False for INFO"""
 		if debug_mode:
 			logging.basicConfig(
-				filename='aioperator.log',
+				filename='ai_english_query.log',
 				level=logging.DEBUG,
 				format='%(asctime)s - %(levelname)s - %(message)s'
 			)
 		else:
 			logging.basicConfig(
-				filename='aioperator.log',
+				filename='ai_english_query.log',
 				level=logging.INFO,
 				format='%(asctime)s - %(levelname)s - %(message)s'
 			)	
@@ -93,11 +99,14 @@ class aiEnglishQuery(tk.Frame):
 	# Runtime Functions
 
 	def generate_sql(self, user_msg: str):
-		"""Return an AI reply with SQL guard rails in place to prevent database modification and sanitization."""
+		"""Return an AI reply with a cleaned SQL statement derived from the given schema."""
+		# special_content = self.schema		
+		# special_content = ""		
 		logging.debug(f"PROMPT: {self.payload.prompts.get_prompt()}")
 		logging.info(f"User Message: [{user_msg}]")
 		logging.debug(f"Model: {self.payload.connection.model}, Verbosity: {self.payload.connection.verbosity}, Reasoning: {self.payload.connection.reasoning_effort}, Max Tokens: {self.payload.connection.maximum_tokens}")
-		reply = self.payload.send_message(user_msg)
+		# reply = self.payload.send_message(user_msg)
+		reply = self.payload.send_message(user_msg, None, self.schema)
 		logging.info(f"Assistant Raw Reply: {reply}")
 		return self.clean_ai_response(reply)
 

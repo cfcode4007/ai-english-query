@@ -98,6 +98,23 @@
   },
   "aiEnglishQuery": {
     "max_pairs": 10,
-    "messages": []
+    "messages": [
+      {
+        "role": "user",
+        "content": "Show me the tables"
+      },
+      {
+        "role": "assistant",
+        "content": "SHOW TABLES;"
+      },
+      {
+        "role": "user",
+        "content": "Show me a country"
+      },
+      {
+        "role": "assistant",
+        "content": "SELECT * FROM nation.countries WHERE country_id = 1;"
+      }
+    ]
   }
 }
