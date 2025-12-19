@@ -1,6 +1,16 @@
 # © 2025 Colin Bond
 # All rights reserved.
 
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    filename="ai_english_query.log",
+    filemode="a",
+    format="%(asctime)s %(levelname)s %(message)s",
+    force=True
+)
+
 import tkinter as tk
 from tkinter import messagebox
 from tkinter import ttk
@@ -11,14 +21,14 @@ from threading import Thread
 import os
 import tkinter.font as tkfont
 import re
-import logging
 
 
 class aiEnglishQuery(tk.Frame):
 	"""
     Interface for submitting plain English queries to an AI agent who generates SQL, which is executed by itself.
     """
-	version = "0.0.5"
+	version = "0.0.6"
+	# - Version 0.0.6: Fixed logging to a file
 	# - Version 0.0.5: Added the ability to query any given database rather than only a sample one
 	# - Version 0.0.4: Corrected Start Speech/Listen button placement, added connection label, made status label live
 	# - Version 0.0.3: Modified STTListener to explicitly stop listening after a 'phrase' (speech within time limit or silence timeout)
@@ -34,9 +44,7 @@ class aiEnglishQuery(tk.Frame):
 	# Startup Functions
 
 	def __init__(self, prompt_file: str, history_file: str, master=None, db=None):
-		super().__init__(master)
-		# Set debug mode to true in logs, displaying more information
-		self.configure_logging(True)						
+		super().__init__(master)						
 		# Initialize the MariaDB connection with required parameters (to be replaced with MariaDB login dialog)
 		# Keep reference to application master window
 		self.master = master
@@ -68,22 +76,7 @@ class aiEnglishQuery(tk.Frame):
 			logging.error("OPENAI_API_KEY environment variable not found. An OpenAI API Key is required to run this application")
 			raise RuntimeError("OPENAI_API_KEY environment variable not found. An OpenAI API Key is required to run this application")
 		else:
-			return api_key
-
-	def configure_logging(self, debug_mode: bool):
-		"""TRUE for DEBUG mode, False for INFO"""
-		if debug_mode:
-			logging.basicConfig(
-				filename='ai_english_query.log',
-				level=logging.DEBUG,
-				format='%(asctime)s - %(levelname)s - %(message)s'
-			)
-		else:
-			logging.basicConfig(
-				filename='ai_english_query.log',
-				level=logging.INFO,
-				format='%(asctime)s - %(levelname)s - %(message)s'
-			)	
+			return api_key	
 
 	def initialize_ai(self, model: str, verbosity, prompt: str, history: str, resetHistory: bool):
 		"""Instantly prepare an AI agent with all of the required parameters to receive calls."""		

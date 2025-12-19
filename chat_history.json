@@ -101,19 +101,27 @@
     "messages": [
       {
         "role": "user",
-        "content": "Show me the tables"
+        "content": "Show me a user"
       },
       {
         "role": "assistant",
-        "content": "SHOW TABLES;"
+        "content": "SELECT id, first_name, last_name, email, role, created_at\nFROM users\nWHERE id = 1\nLIMIT 1;"
       },
       {
         "role": "user",
-        "content": "Show me a country"
+        "content": "Say hello to me using an SQL statement"
       },
       {
         "role": "assistant",
-        "content": "SELECT * FROM nation.countries WHERE country_id = 1;"
+        "content": "SELECT 'Hello!' AS greeting;"
+      },
+      {
+        "role": "user",
+        "content": "Thanks"
+      },
+      {
+        "role": "assistant",
+        "content": "SELECT 'You\\'re welcome!' AS response;"
       }
     ]
   }
